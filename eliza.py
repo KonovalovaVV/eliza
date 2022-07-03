@@ -1,8 +1,12 @@
 import logging
 import random
+import requests
+from lxml import html
 import re
 from googletrans import Translator
+from googlesearch import search
 from collections import namedtuple
+from bs4 import BeautifulSoup
 
 # Fix Python2/Python3 incompatibility
 try: input = raw_input
@@ -173,38 +177,77 @@ class Eliza:
         if text.lower() in self.quits:
             return None
 
-        text = re.sub(r'\s*\.+\s*', ' . ', text)
-        text = re.sub(r'\s*,+\s*', ' , ', text)
-        text = re.sub(r'\s*;+\s*', ' ; ', text)
-        log.debug('After punctuation cleanup: %s', text)
+        if text.endswith('?'):
+            return self.google_answer(text)
+        else:
+            text = re.sub(r'\s*\.+\s*', ' . ', text)
+            text = re.sub(r'\s*,+\s*', ' , ', text)
+            text = re.sub(r'\s*;+\s*', ' ; ', text)
+            log.debug('After punctuation cleanup: %s', text)
 
-        words = [w for w in text.split(' ') if w]
-        log.debug('Input: %s', words)
+            words = [w for w in text.split(' ') if w]
+            log.debug('Input: %s', words)
 
-        words = self._sub(words, self.pres)
-        log.debug('After pre-substitution: %s', words)
+            words = self._sub(words, self.pres)
+            log.debug('After pre-substitution: %s', words)
 
-        keys = [self.keys[w.lower()] for w in words if w.lower() in self.keys]
-        keys = sorted(keys, key=lambda k: -k.weight)
-        log.debug('Sorted keys: %s', [(k.word, k.weight) for k in keys])
+            keys = [self.keys[w.lower()] for w in words if w.lower() in self.keys]
+            keys = sorted(keys, key=lambda k: -k.weight)
+            log.debug('Sorted keys: %s', [(k.word, k.weight) for k in keys])
 
-        output = None
+            output = None
 
-        for key in keys:
-            output = self._match_key(words, key)
-            if output:
-                log.debug('Output from key: %s', output)
-                break
-        if not output:
-            if self.memory:
-                index = random.randrange(len(self.memory))
-                output = self.memory.pop(index)
-                log.debug('Output from memory: %s', output)
+            for key in keys:
+                output = self._match_key(words, key)
+                if output:
+                    log.debug('Output from key: %s', output)
+                    break
+            if not output:
+                if self.memory:
+                    index = random.randrange(len(self.memory))
+                    output = self.memory.pop(index)
+                    log.debug('Output from memory: %s', output)
+                else:
+                    output = self._next_reasmb(self.keys['xnone'].decomps[0])
+                    log.debug('Output from xnone: %s', output)
+
+            return " ".join(output)
+
+
+    def google_answer(self, query, index=0):
+        fallback = 'Sorry, I cannot think of a reply for that.'
+        result = ''
+
+        try:
+            search_result_list = list(search(query, tld="co.in", num=10, stop=3, pause=1))
+
+            page = requests.get(search_result_list[index])
+
+            tree = html.fromstring(page.content)
+
+            soup = BeautifulSoup(page.content, features="lxml")
+
+            article_text = ''
+            article = soup.findAll('p')
+            for element in article:
+                article_text += '\n' + ''.join(element.findAll(text = True))
+            article_text = article_text.replace('\n', '')
+            first_sentence = article_text.split('.')
+            first_sentence = first_sentence[0].split('?')[0]
+
+            chars_without_whitespace = first_sentence.translate(
+                { ord(c): None for c in string.whitespace }
+            )
+
+            if len(chars_without_whitespace) > 0:
+                result = first_sentence
             else:
-                output = self._next_reasmb(self.keys['xnone'].decomps[0])
-                log.debug('Output from xnone: %s', output)
+                result = fallback
 
-        return " ".join(output)
+            return result
+        except:
+            if len(result) == 0: result = fallback
+            return result
 
     def initial(self):
         return random.choice(self.initials)
@@ -222,7 +265,8 @@ class Eliza:
             if output is None:
                 break
            
-            print(translator.translate(output, dest='ru', src='en').text)
+            #print(translator.translate(output, dest='ru', src='en').text)
+            print(output)
 
         print(translator.translate(self.final(), dest='ru', src='en').text)
 
