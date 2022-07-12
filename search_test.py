@@ -8,6 +8,7 @@ from haystack.pipelines import ExtractiveQAPipeline
 from pprint import pprint
 from haystack.pipelines import ExtractiveQAPipeline
 from haystack.nodes import TfidfRetriever
+import sys
 
 
 def main():
@@ -18,7 +19,7 @@ def main():
 
     #document_store = ElasticsearchDocumentStore(host="localhost", username="", password="", index="document")
 
-    doc_dir = "data"
+    doc_dir = "data-civil-code"
     s3_url = "https://s3.eu-central-1.amazonaws.com/deepset.ai-farm-qa/datasets/documents/wiki_gameofthrones_txt1.zip"
     fetch_archive_from_http(url=s3_url, output_dir=doc_dir)
 
@@ -35,11 +36,14 @@ def main():
     pipe = ExtractiveQAPipeline(reader, retriever)
 
     prediction = pipe.run(
-        query="Who is the father of Arya Stark?", params={"Retriever": {"top_k": 10}, "Reader": {"top_k": 5}}
+        query="In which cases payments of social insurance will be included into the amount of the repairable damage?", params={"Retriever": {"top_k": 10}, "Reader": {"top_k": 5}}
     )
 
-    pprint(prediction)
-
+    original_stdout = sys.stdout
+    with open('answer.txt', 'w') as f:
+        sys.stdout = f # Change the standard output to the file we created.
+        print(prediction)
+  #  print_answers(prediction, details="minimum")
 
 
 if __name__ == "__main__":
